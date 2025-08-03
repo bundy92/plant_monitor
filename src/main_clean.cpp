@@ -79,16 +79,18 @@ extern "C" void app_main(void) {
         return;
     }
     
-    // Scan for I2C devices first
+    // Initialize first sensor (this will also initialize I2C)
+    ESP_LOGI(TAG, "Initializing sensors...");
+    esp_err_t init1 = aht10_init(&sensor1_config);
+    
+    // Scan for I2C devices after I2C is initialized
     ESP_LOGI(TAG, "Scanning for I2C devices...");
     esp_err_t scan_ret = aht10_scan_devices(I2C_NUM_0);
     if (scan_ret != ESP_OK) {
         ESP_LOGW(TAG, "I2C scan failed or no devices found");
     }
     
-    // Initialize sensors
-    ESP_LOGI(TAG, "Initializing sensors...");
-    esp_err_t init1 = aht10_init(&sensor1_config);
+    // Initialize second sensor
     esp_err_t init2 = aht10_init(&sensor2_config);
     
     if (init1 != ESP_OK && init2 != ESP_OK) {

@@ -1,5 +1,6 @@
 #include "aht10.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -50,10 +51,16 @@ esp_err_t aht10_init(aht10_config_t* config) {
         return ret;
     }
     
+    // Try to install I2C driver, ignore if already installed
     ret = i2c_driver_install(config->i2c_port, i2c_conf.mode, 0, 0, 0);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "I2C driver install failed: %s", esp_err_to_name(ret));
         return ret;
+    }
+    
+    // If driver was already installed, that's fine
+    if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "I2C driver already installed");
     }
     
     // Send soft reset command
