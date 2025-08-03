@@ -33,7 +33,6 @@ static const char *TAG = "SENSOR_INTERFACE";
 static sensor_interface_config_t g_config;
 static bool g_initialized = false;
 static adc_oneshot_unit_handle_t g_adc_handle = NULL;
-static adc_cali_handle_t g_adc_cali_handle = NULL;
 
 /**
  * @brief Initialize I2C master for sensors
@@ -76,30 +75,21 @@ static esp_err_t i2c_master_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t freq
  */
 static esp_err_t adc_init(void)
 {
-    adc_oneshot_unit_init_cfg_t init_config1 = {
+    // Initialize ADC oneshot driver
+    adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = ADC_UNIT_1,
     };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &g_adc_handle));
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &g_adc_handle));
     
+    // Configure ADC channel for soil moisture sensor
     adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = ADC_ATTEN_DB_11,
     };
-    
-    // Configure soil moisture ADC channel
     ESP_ERROR_CHECK(adc_oneshot_config_channel(g_adc_handle, g_config.adc_soil_pin, &config));
     
     // Configure light sensor ADC channel
     ESP_ERROR_CHECK(adc_oneshot_config_channel(g_adc_handle, g_config.adc_light_pin, &config));
-    
-    // Initialize ADC calibration
-    adc_cali_handle_t handle = NULL;
-    adc_cali_oneshot_new_cfg_t cali_config = {
-        .unit_id = ADC_UNIT_1,
-        .atten = ADC_ATTEN_DB_11,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-    adc_cali_oneshot_new_cfg(&cali_config, &g_adc_cali_handle);
     
     return ESP_OK;
 }
@@ -234,7 +224,6 @@ static esp_err_t read_gy302_sensor(const sensor_config_t *config, sensor_reading
 static esp_err_t read_soil_moisture_sensor(const sensor_config_t *config, sensor_reading_t *reading)
 {
     int adc_raw = 0;
-    int voltage = 0;
     
     esp_err_t ret = adc_oneshot_read(g_adc_handle, g_config.adc_soil_pin, &adc_raw);
     if (ret != ESP_OK) {
@@ -243,13 +232,7 @@ static esp_err_t read_soil_moisture_sensor(const sensor_config_t *config, sensor
         return ret;
     }
     
-    // Convert to voltage (if calibration available)
-    if (g_adc_cali_handle) {
-        adc_cali_oneshot_read(g_adc_cali_handle, adc_raw, &voltage);
-    } else {
-        voltage = adc_raw;
-    }
-    
+    // Store raw ADC value (calibration can be added later if needed)
     reading->soil_moisture = (uint16_t)adc_raw;
     reading->valid = true;
     reading->error = ESP_OK;
@@ -267,7 +250,6 @@ static esp_err_t read_soil_moisture_sensor(const sensor_config_t *config, sensor
 static esp_err_t read_light_sensor(const sensor_config_t *config, sensor_reading_t *reading)
 {
     int adc_raw = 0;
-    int voltage = 0;
     
     esp_err_t ret = adc_oneshot_read(g_adc_handle, g_config.adc_light_pin, &adc_raw);
     if (ret != ESP_OK) {
@@ -276,13 +258,7 @@ static esp_err_t read_light_sensor(const sensor_config_t *config, sensor_reading
         return ret;
     }
     
-    // Convert to voltage (if calibration available)
-    if (g_adc_cali_handle) {
-        adc_cali_oneshot_read(g_adc_cali_handle, adc_raw, &voltage);
-    } else {
-        voltage = adc_raw;
-    }
-    
+    // Store raw ADC value (calibration can be added later if needed)
     reading->light_level = (uint16_t)adc_raw;
     reading->valid = true;
     reading->error = ESP_OK;
@@ -516,11 +492,6 @@ esp_err_t sensor_interface_deinit(void)
     if (g_adc_handle) {
         adc_oneshot_del_unit(g_adc_handle);
         g_adc_handle = NULL;
-    }
-    
-    if (g_adc_cali_handle) {
-        adc_cali_oneshot_del_cfg(g_adc_cali_handle);
-        g_adc_cali_handle = NULL;
     }
     
     // Deinitialize I2C

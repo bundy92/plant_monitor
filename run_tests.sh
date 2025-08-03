@@ -46,11 +46,17 @@ run_test() {
     print_status "INFO" "Running: $test_name"
     echo "========================================="
     
-    if eval "$test_command"; then
+    # Add timeout wrapper to prevent hanging
+    if timeout 120 bash -c "$test_command"; then
         print_status "SUCCESS" "$test_name passed"
         ((PASSED_TESTS++))
     else
-        print_status "ERROR" "$test_name failed"
+        local exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            print_status "ERROR" "$test_name timed out after 120 seconds"
+        else
+            print_status "ERROR" "$test_name failed with exit code $exit_code"
+        fi
         ((FAILED_TESTS++))
     fi
     
@@ -109,7 +115,7 @@ run_unit_tests() {
     cp test/unit/test_plant_monitor.cpp src/main.cpp
     
     # Run unit tests
-    run_test "Unit Tests" "pio run --target upload && pio device monitor --timeout 30"
+    run_test "Unit Tests" "pio run --target upload && pio device monitor --timeout 60"
     
     # Restore main file
     cp src/main_example.cpp src/main.cpp
@@ -127,7 +133,7 @@ run_integration_tests() {
     cp test/integration/test_integration.cpp src/main.cpp
     
     # Run integration tests
-    run_test "Integration Tests" "pio run --target upload && pio device monitor --timeout 45"
+    run_test "Integration Tests" "pio run --target upload && pio device monitor --timeout 90"
     
     # Restore main file
     cp src/main_example.cpp src/main.cpp

@@ -19,6 +19,9 @@
  * 
  * These constants define the WiFi network credentials for connecting
  * to the local network and transmitting data to the server.
+ * 
+ * SECURITY NOTE: In production, these should be stored in environment
+ * variables or secure storage, not hardcoded in source code.
  */
 #define WIFI_SSID "TP-Link_0E28"         /**< WiFi network SSID */
 #define WIFI_PASS "44191207"              /**< WiFi network password */
@@ -71,5 +74,31 @@
  * These constants define device-specific configuration parameters.
  */
 #define DEVICE_ID "esp32_plant_monitor"  /**< Unique device identifier */
+
+/**
+ * @brief Security Configuration
+ * 
+ * These constants define security-related parameters.
+ */
+#define MAX_RETRY_ATTEMPTS 5             /**< Maximum WiFi connection retry attempts */
+#define WIFI_TIMEOUT_MS 10000            /**< WiFi connection timeout in milliseconds */
+#define DATA_TRANSMISSION_TIMEOUT_MS 5000 /**< Data transmission timeout in milliseconds */
+
+/**
+ * @brief Environment Variable Support (for future use)
+ * 
+ * These macros can be used to read configuration from environment
+ * variables when supported by the build system.
+ */
+#ifdef CONFIG_USE_ENV_VARS
+    // Future implementation for environment variable support
+    #define GET_WIFI_SSID() getenv("WIFI_SSID") ?: WIFI_SSID
+    #define GET_WIFI_PASS() getenv("WIFI_PASS") ?: WIFI_PASS
+    #define GET_SERVER_URL() getenv("SERVER_URL") ?: SERVER_URL
+#else
+    #define GET_WIFI_SSID() WIFI_SSID
+    #define GET_WIFI_PASS() WIFI_PASS
+    #define GET_SERVER_URL() SERVER_URL
+#endif
 
 #endif // CONFIG_H 

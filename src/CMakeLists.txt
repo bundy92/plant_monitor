@@ -1,6 +1,6 @@
 idf_component_register(
     SRCS
-        "main_example.cpp"
+        "main.cpp"
         "sensors/sensor_interface.c"
         "sensors/aht10.c"
         "sensors/ds18b20.c"
