@@ -1,3 +1,26 @@
-Flask==2.3.3
-Flask-CORS==4.0.0
-Werkzeug==2.3.7 
+# Plant Monitor - Project Dependencies
+# ===================================
+# This file contains dependencies for the entire plant monitoring system.
+# 
+# ESP32 Dependencies:
+# - PlatformIO handles ESP32 dependencies automatically
+# - See platformio.ini for ESP-IDF framework configuration
+#
+# Raspberry Pi Dependencies:
+# - See raspberry_pi/requirements.txt for comprehensive Python dependencies
+# - Includes Flask, SQLAlchemy, Marshmallow, and testing frameworks
+#
+# Development Dependencies:
+# - Git for version control
+# - PlatformIO CLI for ESP32 development
+# - Python 3.8+ for Raspberry Pi server
+
+# For Raspberry Pi server installation:
+# cd raspberry_pi && pip3 install -r requirements.txt
+
+# For ESP32 development:
+# pio install  # PlatformIO will handle ESP32 dependencies
+
+# For testing:
+# ./run_tests.sh  # ESP32 tests
+# cd raspberry_pi && ./run_tests.sh  # Raspberry Pi tests 

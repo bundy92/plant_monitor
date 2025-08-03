@@ -3,7 +3,7 @@
  * @brief Modular Sensor Interface for Plant Monitoring System
  * 
  * This module provides a unified interface for different sensor types
- * including AHT10, DHT, and future sensor implementations. It supports
+ * including AHT10, DHT, DS18B20, GY-302, and analog sensors. It supports
  * temperature, humidity, soil moisture, and light sensors with
  * configurable sensor selection and error handling.
  * 
@@ -30,6 +30,8 @@ typedef enum {
     SENSOR_TYPE_AHT10 = 0,    /**< AHT10 temperature/humidity sensor */
     SENSOR_TYPE_DHT11,        /**< DHT11 temperature/humidity sensor */
     SENSOR_TYPE_DHT22,        /**< DHT22 temperature/humidity sensor */
+    SENSOR_TYPE_DS18B20,      /**< DS18B20 waterproof temperature sensor */
+    SENSOR_TYPE_GY302,        /**< GY-302 digital light intensity sensor */
     SENSOR_TYPE_SOIL_MOISTURE,/**< Analog soil moisture sensor */
     SENSOR_TYPE_LIGHT,        /**< Analog light sensor */
     SENSOR_TYPE_MAX           /**< Maximum sensor type value */
@@ -54,6 +56,7 @@ typedef struct {
     float humidity;          /**< Humidity percentage */
     uint16_t soil_moisture;  /**< Soil moisture value (0-4095) */
     uint16_t light_level;    /**< Light level value (0-4095) */
+    float lux;               /**< Light intensity in lux (GY-302) */
     bool valid;              /**< Whether reading is valid */
     esp_err_t error;         /**< Error code if reading failed */
 } sensor_reading_t;
@@ -67,6 +70,7 @@ typedef struct {
     uint8_t i2c_sda_pin;        /**< I2C SDA pin */
     uint8_t i2c_scl_pin;        /**< I2C SCL pin */
     uint32_t i2c_frequency;     /**< I2C frequency in Hz */
+    uint8_t onewire_pin;        /**< One-Wire pin for DS18B20 */
     uint8_t adc_soil_pin;       /**< ADC pin for soil moisture */
     uint8_t adc_light_pin;      /**< ADC pin for light sensor */
 } sensor_interface_config_t;

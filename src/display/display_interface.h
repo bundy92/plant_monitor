@@ -3,8 +3,8 @@
  * @brief Modular Display Interface for Plant Monitoring System
  * 
  * This module provides a unified interface for different display types
- * including OLED, LCD, and TFT screens. It supports text, graphics,
- * and emoji display with configurable layouts and themes.
+ * including OLED, LCD, TFT, E-paper, and console displays. It supports
+ * text, graphics, and emoji display with configurable layouts and themes.
  * 
  * @author Plant Monitor System
  * @version 1.0.0
@@ -31,6 +31,8 @@ typedef enum {
     DISPLAY_TYPE_LCD_16X2,          /**< 16x2 LCD display */
     DISPLAY_TYPE_LCD_20X4,          /**< 20x4 LCD display */
     DISPLAY_TYPE_TFT_SPI,           /**< TFT SPI display */
+    DISPLAY_TYPE_EPAPER_SPI,        /**< E-paper display (SPI) */
+    DISPLAY_TYPE_BUILTIN_SSD1306,   /**< Built-in SSD1306 (ESP32 DevKit) */
     DISPLAY_TYPE_CONSOLE,           /**< Console output (for debugging) */
     DISPLAY_TYPE_MAX                /**< Maximum display type value */
 } display_type_t;
@@ -48,6 +50,7 @@ typedef struct {
     uint8_t spi_rst_pin;     /**< SPI RST pin (for SPI displays) */
     uint8_t spi_mosi_pin;    /**< SPI MOSI pin (for SPI displays) */
     uint8_t spi_sck_pin;     /**< SPI SCK pin (for SPI displays) */
+    uint8_t spi_busy_pin;    /**< SPI BUSY pin (for E-paper) */
     bool enabled;             /**< Whether display is enabled */
     char name[32];            /**< Human-readable display name */
 } display_config_t;
@@ -70,6 +73,7 @@ typedef struct {
     float humidity;         /**< Humidity percentage */
     uint16_t soil_moisture; /**< Soil moisture value */
     uint16_t light_level;   /**< Light level value */
+    float lux;              /**< Light intensity in lux */
     uint32_t uptime_seconds; /**< System uptime in seconds */
 } sensor_data_t;
 

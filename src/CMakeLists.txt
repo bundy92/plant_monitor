@@ -3,6 +3,8 @@ idf_component_register(
         "main_example.cpp"
         "sensors/sensor_interface.c"
         "sensors/aht10.c"
+        "sensors/ds18b20.c"
+        "sensors/gy302.c"
         "display/display_interface.c"
     INCLUDE_DIRS
         "."

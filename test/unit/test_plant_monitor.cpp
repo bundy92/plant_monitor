@@ -1,10 +1,10 @@
 /**
  * @file test_plant_monitor.cpp
- * @brief Unit tests for Plant Monitor System
+ * @brief Unit Tests for Plant Monitor System - Modular Architecture
  * 
- * This file contains comprehensive unit tests for the plant monitoring system
- * using Google Test framework. It tests all major functionality including
- * sensor reading, health calculation, and configuration management.
+ * This file contains comprehensive unit tests for the modular plant
+ * monitoring system including sensor interface, display interface,
+ * and individual sensor drivers (AHT10, DS18B20, GY-302).
  * 
  * @author Plant Monitor System
  * @version 1.0.0
@@ -13,399 +13,411 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "plant_monitor.h"
-#include <string.h>
+#include "sensor_interface.h"
+#include "display_interface.h"
+#include "aht10.h"
+#include "ds18b20.h"
+#include "gy302.h"
 
-// ============================================================================
-// TEST FIXTURES
-// ============================================================================
+using ::testing::_;
+using ::testing::Return;
+using ::testing::StrictMock;
 
 /**
- * @brief Test fixture for plant monitor tests
- * 
- * This fixture provides common setup and teardown for plant monitor tests,
- * including configuration initialization and cleanup.
+ * @brief Test fixture for plant monitor system tests
  */
-class PlantMonitorTest : public ::testing::Test 
-{
+class PlantMonitorTest : public ::testing::Test {
 protected:
-    plant_monitor_config_t config;
-    plant_monitor_data_t sensor_data;
-    plant_health_t health_data;
-    
-    void SetUp() override 
-    {
-        // Get default configuration
-        esp_err_t ret = plant_monitor_get_default_config(&config);
-        ASSERT_EQ(ret, ESP_OK);
+    void SetUp() override {
+        // Initialize test configuration
+        memset(&sensor_config, 0, sizeof(sensor_interface_config_t));
+        memset(&display_config, 0, sizeof(display_interface_config_t));
         
-        // Disable WiFi and display for unit tests
-        config.enable_wifi = false;
-        config.enable_display = false;
+        // Configure test sensors
+        sensor_config.sensor_count = 4;
+        sensor_config.i2c_sda_pin = 21;
+        sensor_config.i2c_scl_pin = 22;
+        sensor_config.i2c_frequency = 100000;
+        sensor_config.onewire_pin = 4;
+        sensor_config.adc_soil_pin = 1;
+        sensor_config.adc_light_pin = 2;
         
-        // Initialize system
-        ret = plant_monitor_init(&config);
-        ASSERT_EQ(ret, ESP_OK);
+        // AHT10 sensor
+        sensor_config.sensors[0].type = SENSOR_TYPE_AHT10;
+        sensor_config.sensors[0].address = 0x38;
+        sensor_config.sensors[0].enabled = true;
+        strcpy(sensor_config.sensors[0].name, "AHT10-Test");
+        
+        // DS18B20 sensor
+        sensor_config.sensors[1].type = SENSOR_TYPE_DS18B20;
+        sensor_config.sensors[1].pin = 4;
+        sensor_config.sensors[1].enabled = true;
+        strcpy(sensor_config.sensors[1].name, "DS18B20-Test");
+        
+        // GY-302 sensor
+        sensor_config.sensors[2].type = SENSOR_TYPE_GY302;
+        sensor_config.sensors[2].address = 0x23;
+        sensor_config.sensors[2].enabled = true;
+        strcpy(sensor_config.sensors[2].name, "GY302-Test");
+        
+        // Soil moisture sensor
+        sensor_config.sensors[3].type = SENSOR_TYPE_SOIL_MOISTURE;
+        sensor_config.sensors[3].pin = 1;
+        sensor_config.sensors[3].enabled = true;
+        strcpy(sensor_config.sensors[3].name, "Soil-Test");
+        
+        // Configure test displays
+        display_config.display_count = 3;
+        display_config.enable_backlight = true;
+        display_config.brightness = 128;
+        
+        // Console display
+        display_config.displays[0].type = DISPLAY_TYPE_CONSOLE;
+        display_config.displays[0].enabled = true;
+        strcpy(display_config.displays[0].name, "Console-Test");
+        
+        // Built-in OLED
+        display_config.displays[1].type = DISPLAY_TYPE_BUILTIN_SSD1306;
+        display_config.displays[1].i2c_address = 0x3C;
+        display_config.displays[1].enabled = true;
+        strcpy(display_config.displays[1].name, "OLED-Test");
+        
+        // E-paper display
+        display_config.displays[2].type = DISPLAY_TYPE_EPAPER_SPI;
+        display_config.displays[2].spi_cs_pin = 5;
+        display_config.displays[2].enabled = true;
+        strcpy(display_config.displays[2].name, "Epaper-Test");
     }
     
-    void TearDown() override 
-    {
+    void TearDown() override {
         // Clean up
-        plant_monitor_deinit();
+        sensor_interface_deinit();
+        display_interface_deinit();
     }
+    
+    sensor_interface_config_t sensor_config;
+    display_interface_config_t display_config;
 };
 
-// ============================================================================
-// CONFIGURATION TESTS
-// ============================================================================
+/**
+ * @brief Test sensor interface initialization
+ */
+TEST_F(PlantMonitorTest, SensorInterfaceInit) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    EXPECT_EQ(ret, ESP_OK);
+    
+    // Test with invalid config
+    ret = sensor_interface_init(nullptr);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_ARG);
+}
 
 /**
- * @brief Test default configuration
+ * @brief Test display interface initialization
  */
-TEST_F(PlantMonitorTest, DefaultConfiguration) 
-{
-    plant_monitor_config_t test_config;
-    esp_err_t ret = plant_monitor_get_default_config(&test_config);
-    
+TEST_F(PlantMonitorTest, DisplayInterfaceInit) {
+    esp_err_t ret = display_interface_init(&display_config);
     EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(test_config.sda_pin, PLANT_MONITOR_DEFAULT_SDA_PIN);
-    EXPECT_EQ(test_config.scl_pin, PLANT_MONITOR_DEFAULT_SCL_PIN);
-    EXPECT_EQ(test_config.i2c_freq_hz, PLANT_MONITOR_DEFAULT_I2C_FREQ_HZ);
-    EXPECT_EQ(test_config.aht10_addr_1, PLANT_MONITOR_AHT10_ADDR_1);
-    EXPECT_EQ(test_config.aht10_addr_2, PLANT_MONITOR_AHT10_ADDR_2);
-    EXPECT_FALSE(test_config.enable_dht_sensors);
-    EXPECT_FALSE(test_config.enable_display);
-    EXPECT_FALSE(test_config.enable_wifi);
+    
+    // Test with invalid config
+    ret = display_interface_init(nullptr);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_ARG);
+}
+
+/**
+ * @brief Test sensor reading functionality
+ */
+TEST_F(PlantMonitorTest, SensorReading) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    sensor_reading_t readings[4];
+    int count = sensor_interface_read_all(readings, 4);
+    
+    // Should return number of enabled sensors (may be 0 if no hardware)
+    EXPECT_GE(count, 0);
+    EXPECT_LE(count, 4);
+}
+
+/**
+ * @brief Test individual sensor reading
+ */
+TEST_F(PlantMonitorTest, IndividualSensorReading) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    sensor_reading_t reading;
+    
+    // Test AHT10 reading
+    ret = sensor_interface_read_sensor(SENSOR_TYPE_AHT10, &reading);
+    // May fail if no hardware, but should not crash
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+    
+    // Test DS18B20 reading
+    ret = sensor_interface_read_sensor(SENSOR_TYPE_DS18B20, &reading);
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+    
+    // Test GY-302 reading
+    ret = sensor_interface_read_sensor(SENSOR_TYPE_GY302, &reading);
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+}
+
+/**
+ * @brief Test display update functionality
+ */
+TEST_F(PlantMonitorTest, DisplayUpdate) {
+    esp_err_t ret = display_interface_init(&display_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    sensor_data_t sensor_data = {
+        .temperature = 25.5f,
+        .humidity = 60.0f,
+        .soil_moisture = 2048,
+        .light_level = 1024,
+        .lux = 5000.0f,
+        .uptime_seconds = 3600
+    };
+    
+    plant_health_t health = {
+        .health_score = 85.0f,
+        .health_text = "Good",
+        .emoji = "🙂",
+        .recommendation = "Keep current conditions"
+    };
+    
+    ret = display_interface_update(&sensor_data, &health);
+    EXPECT_EQ(ret, ESP_OK);
+}
+
+/**
+ * @brief Test I2C device scanning
+ */
+TEST_F(PlantMonitorTest, I2CScan) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    int device_count = sensor_interface_scan_i2c();
+    // Should return >= 0 (may be 0 if no I2C devices)
+    EXPECT_GE(device_count, 0);
+}
+
+/**
+ * @brief Test sensor status
+ */
+TEST_F(PlantMonitorTest, SensorStatus) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    int working_sensors, total_sensors;
+    ret = sensor_interface_get_status(&working_sensors, &total_sensors);
+    EXPECT_EQ(ret, ESP_OK);
+    EXPECT_EQ(total_sensors, 4);
+    EXPECT_GE(working_sensors, 0);
+    EXPECT_LE(working_sensors, total_sensors);
+}
+
+/**
+ * @brief Test display status
+ */
+TEST_F(PlantMonitorTest, DisplayStatus) {
+    esp_err_t ret = display_interface_init(&display_config);
+    ASSERT_EQ(ret, ESP_OK);
+    
+    int working_displays, total_displays;
+    ret = display_interface_get_status(&working_displays, &total_displays);
+    EXPECT_EQ(ret, ESP_OK);
+    EXPECT_EQ(total_displays, 3);
+    EXPECT_GE(working_displays, 0);
+    EXPECT_LE(working_displays, total_displays);
+}
+
+/**
+ * @brief Test AHT10 sensor driver
+ */
+TEST_F(PlantMonitorTest, AHT10Driver) {
+    aht10_config_t config = {
+        .address = 0x38,
+        .sda_pin = 21,
+        .scl_pin = 22,
+        .i2c_freq = 100000,
+        .enabled = true
+    };
+    
+    esp_err_t ret = aht10_init(&config);
+    // May fail if no hardware, but should not crash
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+    
+    if (ret == ESP_OK) {
+        aht10_reading_t reading;
+        ret = aht10_read(&reading);
+        // May fail if no hardware, but should not crash
+        EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+        
+        aht10_deinit();
+    }
+}
+
+/**
+ * @brief Test DS18B20 sensor driver
+ */
+TEST_F(PlantMonitorTest, DS18B20Driver) {
+    ds18b20_config_t config = {
+        .pin = 4,
+        .resolution = 12,
+        .enabled = true,
+        .rom_code = 0
+    };
+    
+    esp_err_t ret = ds18b20_init(&config);
+    // May fail if no hardware, but should not crash
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+    
+    if (ret == ESP_OK) {
+        ds18b20_reading_t reading;
+        ret = ds18b20_read(&reading);
+        // May fail if no hardware, but should not crash
+        EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+        
+        ds18b20_deinit();
+    }
+}
+
+/**
+ * @brief Test GY-302 sensor driver
+ */
+TEST_F(PlantMonitorTest, GY302Driver) {
+    gy302_config_t config = {
+        .address = 0x23,
+        .sda_pin = 21,
+        .scl_pin = 22,
+        .i2c_freq = 100000,
+        .mode = GY302_MODE_ONE_H,
+        .enabled = true
+    };
+    
+    esp_err_t ret = gy302_init(&config);
+    // May fail if no hardware, but should not crash
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+    
+    if (ret == ESP_OK) {
+        gy302_reading_t reading;
+        ret = gy302_read(&reading);
+        // May fail if no hardware, but should not crash
+        EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_NOT_FOUND);
+        
+        gy302_deinit();
+    }
+}
+
+/**
+ * @brief Test error handling with invalid parameters
+ */
+TEST_F(PlantMonitorTest, ErrorHandling) {
+    // Test sensor interface with invalid parameters
+    esp_err_t ret = sensor_interface_read_all(nullptr, 0);
+    EXPECT_EQ(ret, -1);
+    
+    ret = sensor_interface_read_sensor(SENSOR_TYPE_AHT10, nullptr);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_ARG);
+    
+    // Test display interface with invalid parameters
+    ret = display_interface_update(nullptr, nullptr);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_ARG);
+    
+    ret = display_interface_get_status(nullptr, nullptr);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_ARG);
+}
+
+/**
+ * @brief Test sensor type validation
+ */
+TEST_F(PlantMonitorTest, SensorTypeValidation) {
+    sensor_reading_t reading;
+    
+    // Test unknown sensor type
+    esp_err_t ret = sensor_interface_read_sensor(SENSOR_TYPE_MAX, &reading);
+    EXPECT_EQ(ret, ESP_ERR_NOT_FOUND);
+}
+
+/**
+ * @brief Test display type validation
+ */
+TEST_F(PlantMonitorTest, DisplayTypeValidation) {
+    display_interface_config_t config = display_config;
+    config.displays[0].type = DISPLAY_TYPE_MAX;
+    
+    esp_err_t ret = display_interface_init(&config);
+    // Should handle unknown display type gracefully
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_INVALID_ARG);
 }
 
 /**
  * @brief Test configuration validation
  */
-TEST_F(PlantMonitorTest, ConfigurationValidation) 
-{
-    plant_monitor_config_t invalid_config;
-    memset(&invalid_config, 0, sizeof(invalid_config));
+TEST_F(PlantMonitorTest, ConfigurationValidation) {
+    // Test with invalid sensor count
+    sensor_interface_config_t invalid_config = sensor_config;
+    invalid_config.sensor_count = 10; // More than array size
     
-    // Test with NULL config
-    esp_err_t ret = plant_monitor_init(NULL);
-    EXPECT_NE(ret, ESP_OK);
+    esp_err_t ret = sensor_interface_init(&invalid_config);
+    // Should handle gracefully
+    EXPECT_TRUE(ret == ESP_OK || ret == ESP_ERR_INVALID_ARG);
 }
 
-// ============================================================================
-// SENSOR READING TESTS
-// ============================================================================
-
 /**
- * @brief Test sensor reading with valid data
+ * @brief Test deinitialization
  */
-TEST_F(PlantMonitorTest, ReadSensorsValid) 
-{
-    esp_err_t ret = plant_monitor_read_sensors(&sensor_data);
+TEST_F(PlantMonitorTest, Deinitialization) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
     
-    // Should succeed even if sensors are not connected
+    ret = sensor_interface_deinit();
     EXPECT_EQ(ret, ESP_OK);
     
-    // Check that data structure is properly initialized
-    EXPECT_GE(sensor_data.uptime_seconds, 0);
-    EXPECT_FALSE(sensor_data.wifi_connected); // WiFi disabled in test
-    EXPECT_FALSE(sensor_data.data_sent);
-    EXPECT_GT(sensor_data.timestamp, 0);
-}
-
-/**
- * @brief Test sensor reading with NULL data
- */
-TEST_F(PlantMonitorTest, ReadSensorsNullData) 
-{
-    esp_err_t ret = plant_monitor_read_sensors(NULL);
-    EXPECT_NE(ret, ESP_OK);
-}
-
-// ============================================================================
-// HEALTH CALCULATION TESTS
-// ============================================================================
-
-/**
- * @brief Test health calculation with excellent conditions
- */
-TEST_F(PlantMonitorTest, HealthCalculationExcellent) 
-{
-    // Set up excellent conditions
-    sensor_data.temperature_avg = 23.0f;  // Optimal range
-    sensor_data.humidity_avg = 55.0f;    // Optimal range
+    ret = display_interface_init(&display_config);
+    ASSERT_EQ(ret, ESP_OK);
     
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_EXCELLENT);
-    EXPECT_STREQ(health_data.health_text, "Excellent");
-    EXPECT_STREQ(health_data.emoji, "😊");
-    EXPECT_GE(health_data.health_score, 90.0f);
-}
-
-/**
- * @brief Test health calculation with good conditions
- */
-TEST_F(PlantMonitorTest, HealthCalculationGood) 
-{
-    // Set up good conditions
-    sensor_data.temperature_avg = 25.0f;  // Optimal range
-    sensor_data.humidity_avg = 35.0f;    // Acceptable range
-    
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_GOOD);
-    EXPECT_STREQ(health_data.health_text, "Good");
-    EXPECT_STREQ(health_data.emoji, "🙂");
-    EXPECT_GE(health_data.health_score, 70.0f);
-    EXPECT_LT(health_data.health_score, 90.0f);
-}
-
-/**
- * @brief Test health calculation with fair conditions
- */
-TEST_F(PlantMonitorTest, HealthCalculationFair) 
-{
-    // Set up fair conditions
-    sensor_data.temperature_avg = 30.0f;  // Acceptable range
-    sensor_data.humidity_avg = 25.0f;    // Below minimum
-    
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_FAIR);
-    EXPECT_STREQ(health_data.health_text, "Fair");
-    EXPECT_STREQ(health_data.emoji, "😐");
-    EXPECT_GE(health_data.health_score, 50.0f);
-    EXPECT_LT(health_data.health_score, 70.0f);
-}
-
-/**
- * @brief Test health calculation with poor conditions
- */
-TEST_F(PlantMonitorTest, HealthCalculationPoor) 
-{
-    // Set up poor conditions
-    sensor_data.temperature_avg = 8.0f;   // Below minimum
-    sensor_data.humidity_avg = 25.0f;    // Below minimum
-    
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_POOR);
-    EXPECT_STREQ(health_data.health_text, "Poor");
-    EXPECT_STREQ(health_data.emoji, "😟");
-    EXPECT_GE(health_data.health_score, 30.0f);
-    EXPECT_LT(health_data.health_score, 50.0f);
-}
-
-/**
- * @brief Test health calculation with critical conditions
- */
-TEST_F(PlantMonitorTest, HealthCalculationCritical) 
-{
-    // Set up critical conditions
-    sensor_data.temperature_avg = 5.0f;   // Way below minimum
-    sensor_data.humidity_avg = 10.0f;    // Way below minimum
-    
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_CRITICAL);
-    EXPECT_STREQ(health_data.health_text, "Critical");
-    EXPECT_STREQ(health_data.emoji, "😱");
-    EXPECT_LT(health_data.health_score, 30.0f);
-}
-
-/**
- * @brief Test health calculation with NULL data
- */
-TEST_F(PlantMonitorTest, HealthCalculationNullData) 
-{
-    esp_err_t ret = plant_monitor_calculate_health(NULL, &health_data);
-    EXPECT_NE(ret, ESP_OK);
-    
-    ret = plant_monitor_calculate_health(&sensor_data, NULL);
-    EXPECT_NE(ret, ESP_OK);
-}
-
-// ============================================================================
-// DISPLAY TESTS
-// ============================================================================
-
-/**
- * @brief Test display update with enabled display
- */
-TEST_F(PlantMonitorTest, DisplayUpdateEnabled) 
-{
-    // Enable display
-    config.enable_display = true;
-    plant_monitor_init(&config);
-    
-    // Set up test data
-    sensor_data.temperature_avg = 23.0f;
-    sensor_data.humidity_avg = 55.0f;
-    sensor_data.soil_moisture = 512;
-    sensor_data.light_level = 2048;
-    sensor_data.uptime_seconds = 3600;
-    
-    plant_monitor_calculate_health(&sensor_data, &health_data);
-    
-    esp_err_t ret = plant_monitor_update_display(&sensor_data, &health_data);
+    ret = display_interface_deinit();
     EXPECT_EQ(ret, ESP_OK);
 }
 
 /**
- * @brief Test display update with disabled display
+ * @brief Test multiple initialization calls
  */
-TEST_F(PlantMonitorTest, DisplayUpdateDisabled) 
-{
-    // Disable display
-    config.enable_display = false;
-    plant_monitor_init(&config);
+TEST_F(PlantMonitorTest, MultipleInitialization) {
+    esp_err_t ret = sensor_interface_init(&sensor_config);
+    ASSERT_EQ(ret, ESP_OK);
     
-    esp_err_t ret = plant_monitor_update_display(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK); // Should succeed even when disabled
-}
-
-// ============================================================================
-// DATA TRANSMISSION TESTS
-// ============================================================================
-
-/**
- * @brief Test data transmission with disabled WiFi
- */
-TEST_F(PlantMonitorTest, DataTransmissionDisabled) 
-{
-    // WiFi is disabled in test setup
-    esp_err_t ret = plant_monitor_transmit_data(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK); // Should succeed even when WiFi is disabled
-}
-
-// ============================================================================
-// SYSTEM STATUS TESTS
-// ============================================================================
-
-/**
- * @brief Test system status retrieval
- */
-TEST_F(PlantMonitorTest, SystemStatus) 
-{
-    int sensors_working;
-    bool display_working, wifi_connected;
-    
-    esp_err_t ret = plant_monitor_get_status(&sensors_working, &display_working, &wifi_connected);
+    // Second initialization should succeed (already initialized)
+    ret = sensor_interface_init(&sensor_config);
     EXPECT_EQ(ret, ESP_OK);
     
-    EXPECT_GE(sensors_working, 0);
-    EXPECT_LE(sensors_working, 2);
-    EXPECT_FALSE(display_working); // Display disabled in test
-    EXPECT_FALSE(wifi_connected);  // WiFi disabled in test
+    sensor_interface_deinit();
 }
 
 /**
- * @brief Test system status with NULL parameters
+ * @brief Test sensor reading without initialization
  */
-TEST_F(PlantMonitorTest, SystemStatusNullParams) 
-{
-    esp_err_t ret = plant_monitor_get_status(NULL, NULL, NULL);
-    EXPECT_NE(ret, ESP_OK);
-}
-
-// ============================================================================
-// I2C SCANNING TESTS
-// ============================================================================
-
-/**
- * @brief Test I2C device scanning
- */
-TEST_F(PlantMonitorTest, I2CDeviceScanning) 
-{
-    esp_err_t ret = plant_monitor_scan_i2c_devices();
-    // Should succeed even if no devices are found
-    EXPECT_EQ(ret, ESP_OK);
-}
-
-// ============================================================================
-// INTEGRATION TESTS
-// ============================================================================
-
-/**
- * @brief Test complete monitoring cycle
- */
-TEST_F(PlantMonitorTest, CompleteMonitoringCycle) 
-{
-    // Read sensors
-    esp_err_t ret = plant_monitor_read_sensors(&sensor_data);
-    EXPECT_EQ(ret, ESP_OK);
-    
-    // Calculate health
-    ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    
-    // Update display
-    ret = plant_monitor_update_display(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    
-    // Transmit data
-    ret = plant_monitor_transmit_data(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    
-    // Verify data integrity
-    EXPECT_GE(sensor_data.uptime_seconds, 0);
-    EXPECT_GT(sensor_data.timestamp, 0);
-    EXPECT_NE(health_data.health_text, nullptr);
-    EXPECT_NE(health_data.emoji, nullptr);
-    EXPECT_NE(health_data.recommendation, nullptr);
-}
-
-// ============================================================================
-// EDGE CASE TESTS
-// ============================================================================
-
-/**
- * @brief Test with extreme temperature values
- */
-TEST_F(PlantMonitorTest, ExtremeTemperatureValues) 
-{
-    sensor_data.temperature_avg = -50.0f;  // Extreme low
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_CRITICAL);
-    
-    sensor_data.temperature_avg = 100.0f;  // Extreme high
-    ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_CRITICAL);
+TEST_F(PlantMonitorTest, ReadingWithoutInit) {
+    sensor_reading_t reading;
+    esp_err_t ret = sensor_interface_read_sensor(SENSOR_TYPE_AHT10, &reading);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_STATE);
 }
 
 /**
- * @brief Test with extreme humidity values
+ * @brief Test display update without initialization
  */
-TEST_F(PlantMonitorTest, ExtremeHumidityValues) 
-{
-    sensor_data.humidity_avg = -10.0f;  // Invalid low
-    esp_err_t ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_CRITICAL);
+TEST_F(PlantMonitorTest, DisplayWithoutInit) {
+    sensor_data_t sensor_data = {0};
+    plant_health_t health = {0};
     
-    sensor_data.humidity_avg = 110.0f;  // Invalid high
-    ret = plant_monitor_calculate_health(&sensor_data, &health_data);
-    EXPECT_EQ(ret, ESP_OK);
-    EXPECT_EQ(health_data.health_level, PLANT_HEALTH_CRITICAL);
+    esp_err_t ret = display_interface_update(&sensor_data, &health);
+    EXPECT_EQ(ret, ESP_ERR_INVALID_STATE);
 }
-
-// ============================================================================
-// MAIN TEST RUNNER
-// ============================================================================
 
 /**
  * @brief Main function for running tests
  */
-extern "C" void app_main(void) 
-{
-    // Initialize Google Test
-    ::testing::InitGoogleTest();
-    
-    // Run all tests
-    int result = RUN_ALL_TESTS();
-    
-    // Exit with test result
-    exit(result);
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 } 
