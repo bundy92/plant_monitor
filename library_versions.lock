@@ -1,0 +1,103 @@
+# Plant Monitor Project - Library Version Lock File
+# Generated automatically to ensure reproducible builds
+# Last updated: $(date)
+
+# =============================================================================
+# PLATFORMIO & ESP32 PLATFORM
+# =============================================================================
+[platformio]
+core_version = 6.1.18
+espressif32_platform = 6.12.0
+
+# =============================================================================
+# PYTHON DEPENDENCIES (Server Components)
+# =============================================================================
+[python_packages]
+Flask = 2.3.3
+Flask-CORS = 4.0.0
+Werkzeug = 2.3.7
+
+# Virtual Environment Dependencies
+ajsonrpc = 1.2.0
+anyio = 4.9.0
+bottle = 0.13.4
+certifi = 2025.8.3
+charset-normalizer = 3.4.2
+click = 8.1.7
+colorama = 0.4.6
+h11 = 0.16.0
+idna = 3.10
+marshmallow = 3.26.1
+packaging = 25.0
+platformio = 6.1.18
+pyelftools = 0.32
+pyserial = 3.5
+requests = 2.32.4
+semantic-version = 2.10.0
+sniffio = 1.3.1
+starlette = 0.46.2
+tabulate = 0.9.0
+urllib3 = 2.5.0
+uvicorn = 0.34.3
+wsproto = 1.2.0
+
+# ESP Tool Dependencies
+bitarray = 3.6.0
+bitstring = 4.3.1
+cffi = 1.17.1
+cryptography = 45.0.5
+ecdsa = 0.19.1
+intelhex = 2.3.0
+pycparser = 2.22
+reedsolo = 1.7.0
+six = 1.17.0
+
+# =============================================================================
+# ESP-IDF FRAMEWORK COMPONENTS
+# =============================================================================
+[esp_idf_components]
+# Core ESP-IDF components used in the project
+freertos = "ESP-IDF built-in"
+driver = "ESP-IDF built-in"
+esp_log = "ESP-IDF built-in"
+esp_err = "ESP-IDF built-in"
+esp_wifi = "ESP-IDF built-in"
+esp_event = "ESP-IDF built-in"
+esp_system = "ESP-IDF built-in"
+esp_timer = "ESP-IDF built-in"
+nvs_flash = "ESP-IDF built-in"
+esp_http_client = "ESP-IDF built-in"
+cjson = "ESP-IDF built-in"
+esp_adc = "ESP-IDF built-in"
+
+# =============================================================================
+# HARDWARE SPECIFIC LIBRARIES
+# =============================================================================
+[hardware_libraries]
+# AHT10 Sensor Library (Custom implementation)
+aht10_sensor = "custom_v1.0.0"
+
+# =============================================================================
+# SYSTEM REQUIREMENTS
+# =============================================================================
+[system]
+python_version = "3.13.3"
+cmake_min_version = "3.16"
+git_version = "2.48.1"
+
+# =============================================================================
+# BOARD CONFIGURATION
+# =============================================================================
+[board_config]
+board = "esp32-c6-devkitc-1"
+framework = "espidf"
+platform = "espressif32"
+monitor_speed = 115200
+upload_speed = 921600
+
+# =============================================================================
+# BUILD TOOLS
+# =============================================================================
+[build_tools]
+toolchain-xtensa-esp32 = "8.4.0+2021r2-patch5"
+tool-esptoolpy = "2.40900.0"
