@@ -1,2 +1,8 @@
-idf_component_register(SRCS "main.cpp" "sensors/aht10.c"
-                    INCLUDE_DIRS "." ".." "sensors") 
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "plant_monitor.c"
+    INCLUDE_DIRS
+        "."
+        ".."
+) 

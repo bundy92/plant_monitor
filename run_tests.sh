@@ -1,136 +1,318 @@
 #!/bin/bash
 
-echo "🧪 ESP32 Plant Monitor - Test Runner"
-echo "====================================="
+# Plant Monitor - Comprehensive Test Runner
+# =======================================
+# This script runs all types of tests for the plant monitoring system
+# including unit tests, integration tests, and system verification.
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Test results
+TOTAL_TESTS=0
+PASSED_TESTS=0
+FAILED_TESTS=0
+
+# Function to print colored output
+print_status() {
+    local status=$1
+    local message=$2
+    
+    case $status in
+        "PASS")
+            echo -e "${GREEN}✅ PASS${NC}: $message"
+            ;;
+        "FAIL")
+            echo -e "${RED}❌ FAIL${NC}: $message"
+            ;;
+        "INFO")
+            echo -e "${BLUE}ℹ️  INFO${NC}: $message"
+            ;;
+        "WARN")
+            echo -e "${YELLOW}⚠️  WARN${NC}: $message"
+            ;;
+    esac
+}
+
+# Function to run a test and capture results
+run_test() {
+    local test_name=$1
+    local test_command=$2
+    
+    print_status "INFO" "Running $test_name..."
+    
+    if eval "$test_command" > /tmp/test_output.log 2>&1; then
+        print_status "PASS" "$test_name completed successfully"
+        ((PASSED_TESTS++))
+    else
+        print_status "FAIL" "$test_name failed"
+        echo -e "${RED}Test output:${NC}"
+        cat /tmp/test_output.log
+        ((FAILED_TESTS++))
+    fi
+    
+    ((TOTAL_TESTS++))
+    echo ""
+}
+
+# Function to check if we're in the right directory
+check_environment() {
+    if [ ! -f "platformio.ini" ]; then
+        print_status "FAIL" "platformio.ini not found. Please run from project root."
+        exit 1
+    fi
+    
+    if [ ! -f "src/plant_monitor.h" ]; then
+        print_status "FAIL" "plant_monitor.h not found."
+        exit 1
+    fi
+    
+    if [ ! -f "src/plant_monitor.c" ]; then
+        print_status "FAIL" "plant_monitor.c not found."
+        exit 1
+    fi
+    
+    print_status "INFO" "Environment check passed"
+}
 
 # Function to run unit tests
 run_unit_tests() {
-    echo "📋 Running unit tests..."
-    if [ -f "test/unit/test_aht10.cpp" ]; then
-        echo "✅ Unit test file found"
-        # TODO: Add actual unit test execution
-        echo "⚠️  Unit tests not yet implemented (requires Google Test framework)"
-    else
-        echo "❌ Unit test file not found"
+    print_status "INFO" "Starting Unit Tests"
+    echo "=================================="
+    
+    # Check if unit test file exists
+    if [ ! -f "test/unit/test_plant_monitor.cpp" ]; then
+        print_status "WARN" "Unit test file not found, skipping unit tests"
+        return
     fi
+    
+    # Copy unit test to main.cpp
+    cp test/unit/test_plant_monitor.cpp src/main.cpp
+    
+    # Build and run unit tests
+    run_test "Unit Tests" "pio run --target upload && pio device monitor --timeout 30"
+    
+    # Restore original main.cpp
+    cp src/main_example.cpp src/main.cpp
 }
 
 # Function to run integration tests
 run_integration_tests() {
-    echo "🔗 Running integration tests..."
+    print_status "INFO" "Starting Integration Tests"
+    echo "========================================"
     
-    # Test 1: Build verification
-    echo "📦 Testing build process..."
-    if pio run --target build > /dev/null 2>&1; then
-        echo "✅ Build test passed"
-    else
-        echo "❌ Build test failed"
-        return 1
+    # Check if integration test file exists
+    if [ ! -f "test/integration/test_integration.cpp" ]; then
+        print_status "WARN" "Integration test file not found, skipping integration tests"
+        return
     fi
     
-    # Test 2: Code style check
-    echo "🎨 Testing code style..."
-    if command -v clang-format > /dev/null 2>&1; then
-        echo "✅ Code style check available"
-    else
-        echo "⚠️  clang-format not found, skipping style check"
-    fi
+    # Copy integration test to main.cpp
+    cp test/integration/test_integration.cpp src/main.cpp
     
-    # Test 3: Memory check
-    echo "🧠 Testing memory usage..."
-    if pio run --target size > /dev/null 2>&1; then
-        echo "✅ Memory usage check passed"
-    else
-        echo "❌ Memory usage check failed"
-    fi
+    # Build and run integration tests
+    run_test "Integration Tests" "pio run --target upload && pio device monitor --timeout 30"
+    
+    # Restore original main.cpp
+    cp src/main_example.cpp src/main.cpp
 }
 
-# Function to run sensor tests
-run_sensor_tests() {
-    echo "🌡️  Running sensor tests..."
+# Function to run system verification tests
+run_system_tests() {
+    print_status "INFO" "Starting System Verification Tests"
+    echo "================================================"
     
-    echo "📡 Testing AHT10 sensor library..."
-    if [ -f "src/sensors/aht10.h" ] && [ -f "src/sensors/aht10.c" ]; then
-        echo "✅ AHT10 sensor library found"
+    # Copy example main to main.cpp
+    cp src/main_example.cpp src/main.cpp
+    
+    # Test build
+    run_test "Build Test" "pio run"
+    
+    # Test upload (if device connected)
+    if pio device list | grep -q "tty"; then
+        run_test "Upload Test" "pio run --target upload"
     else
-        echo "❌ AHT10 sensor library missing"
-        return 1
+        print_status "WARN" "No device connected, skipping upload test"
     fi
     
-    echo "🔧 Testing sensor initialization..."
-    # This would require actual hardware testing
-    echo "⚠️  Hardware sensor tests require connected ESP32"
+    # Test I2C scanning
+    run_test "I2C Scan Test" "pio run --target upload && pio device monitor --timeout 10"
 }
 
-# Function to run project verification
-run_project_verification() {
-    echo "🔍 Running project verification..."
+# Function to run code quality checks
+run_code_quality_checks() {
+    print_status "INFO" "Starting Code Quality Checks"
+    echo "========================================="
     
-    # Check essential files
-    essential_files=(
-        "src/main.cpp"
-        "src/sensors/aht10.h"
-        "src/sensors/aht10.c"
+    # Check for required files
+    local required_files=(
+        "src/plant_monitor.h"
+        "src/plant_monitor.c"
+        "src/main_example.cpp"
         "platformio.ini"
         "config.h"
-        "README.md"
     )
     
-    for file in "${essential_files[@]}"; do
+    for file in "${required_files[@]}"; do
         if [ -f "$file" ]; then
-            echo "✅ $file"
+            print_status "PASS" "Found $file"
+            ((PASSED_TESTS++))
         else
-            echo "❌ $file (missing)"
+            print_status "FAIL" "Missing $file"
+            ((FAILED_TESTS++))
         fi
+        ((TOTAL_TESTS++))
     done
     
-    # Check project structure
-    echo "📁 Checking project structure..."
-    if [ -d "src" ] && [ -d "test" ]; then
-        echo "✅ Project structure looks good"
+    # Check for documentation
+    if grep -q "@brief" src/plant_monitor.h; then
+        print_status "PASS" "Header documentation found"
+        ((PASSED_TESTS++))
     else
-        echo "⚠️  Some directories missing"
+        print_status "FAIL" "Header documentation missing"
+        ((FAILED_TESTS++))
+    fi
+    ((TOTAL_TESTS++))
+    
+    if grep -q "@brief" src/plant_monitor.c; then
+        print_status "PASS" "Implementation documentation found"
+        ((PASSED_TESTS++))
+    else
+        print_status "FAIL" "Implementation documentation missing"
+        ((FAILED_TESTS++))
+    fi
+    ((TOTAL_TESTS++))
+}
+
+# Function to run performance tests
+run_performance_tests() {
+    print_status "INFO" "Starting Performance Tests"
+    echo "====================================="
+    
+    # Test build time
+    local start_time=$(date +%s)
+    if pio run --target clean > /dev/null 2>&1 && pio run > /dev/null 2>&1; then
+        local end_time=$(date +%s)
+        local build_time=$((end_time - start_time))
+        
+        if [ $build_time -lt 60 ]; then
+            print_status "PASS" "Build completed in ${build_time}s (under 60s limit)"
+            ((PASSED_TESTS++))
+        else
+            print_status "FAIL" "Build took ${build_time}s (over 60s limit)"
+            ((FAILED_TESTS++))
+        fi
+        ((TOTAL_TESTS++))
+    else
+        print_status "FAIL" "Build failed during performance test"
+        ((FAILED_TESTS++))
+        ((TOTAL_TESTS++))
     fi
 }
 
-# Main test execution
+# Function to run memory usage tests
+run_memory_tests() {
+    print_status "INFO" "Starting Memory Usage Tests"
+    echo "======================================="
+    
+    # Check binary size
+    if [ -f ".pio/build/esp32-c6-devkitc-1/firmware.elf" ]; then
+        local binary_size=$(stat -c%s .pio/build/esp32-c6-devkitc-1/firmware.elf)
+        local max_size=1048576  # 1MB limit
+        
+        if [ $binary_size -lt $max_size ]; then
+            print_status "PASS" "Binary size: ${binary_size} bytes (under 1MB limit)"
+            ((PASSED_TESTS++))
+        else
+            print_status "FAIL" "Binary size: ${binary_size} bytes (over 1MB limit)"
+            ((FAILED_TESTS++))
+        fi
+        ((TOTAL_TESTS++))
+    else
+        print_status "WARN" "Binary file not found, skipping memory test"
+    fi
+}
+
+# Function to print test summary
+print_summary() {
+    echo ""
+    echo "========================================"
+    echo "           TEST SUMMARY"
+    echo "========================================"
+    echo "Total Tests: $TOTAL_TESTS"
+    echo -e "Passed: ${GREEN}$PASSED_TESTS${NC}"
+    echo -e "Failed: ${RED}$FAILED_TESTS${NC}"
+    
+    if [ $FAILED_TESTS -eq 0 ]; then
+        echo -e "${GREEN}🎉 All tests passed!${NC}"
+        exit 0
+    else
+        echo -e "${RED}❌ Some tests failed${NC}"
+        exit 1
+    fi
+}
+
+# Main function
 main() {
-    case "$1" in
+    echo "🌱 Plant Monitor - Comprehensive Test Suite"
+    echo "=========================================="
+    echo ""
+    
+    # Check environment
+    check_environment
+    
+    # Run different types of tests
+    case "${1:-all}" in
         "unit")
             run_unit_tests
             ;;
         "integration")
             run_integration_tests
             ;;
-        "sensor")
-            run_sensor_tests
+        "system")
+            run_system_tests
             ;;
-        "verify")
-            run_project_verification
+        "quality")
+            run_code_quality_checks
+            ;;
+        "performance")
+            run_performance_tests
+            ;;
+        "memory")
+            run_memory_tests
             ;;
         "all")
-            echo "🚀 Running all tests..."
-            run_project_verification
+            run_code_quality_checks
+            run_performance_tests
+            run_memory_tests
+            run_system_tests
             run_unit_tests
             run_integration_tests
-            run_sensor_tests
             ;;
         *)
-            echo "Usage: $0 {unit|integration|sensor|verify|all}"
+            echo "Usage: $0 [unit|integration|system|quality|performance|memory|all]"
             echo ""
-            echo "Test types:"
+            echo "Test Types:"
             echo "  unit        - Run unit tests"
             echo "  integration - Run integration tests"
-            echo "  sensor      - Run sensor-specific tests"
-            echo "  verify      - Verify project structure"
-            echo "  all         - Run all tests"
+            echo "  system      - Run system verification tests"
+            echo "  quality     - Run code quality checks"
+            echo "  performance - Run performance tests"
+            echo "  memory      - Run memory usage tests"
+            echo "  all         - Run all tests (default)"
             exit 1
             ;;
     esac
     
-    echo ""
-    echo "✨ Test execution completed!"
+    # Print summary
+    print_summary
 }
 
-# Run main function with arguments
+# Run main function
 main "$@" 
