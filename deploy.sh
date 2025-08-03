@@ -16,9 +16,9 @@ if [ ! -f "platformio.ini" ]; then
     exit 1
 fi
 
-# Check if main.cpp exists
-if [ ! -f "src/main.cpp" ]; then
-    echo "❌ Error: src/main.cpp not found."
+# Check if main_example.cpp exists
+if [ ! -f "src/main_example.cpp" ]; then
+    echo "❌ Error: src/main_example.cpp not found."
     exit 1
 fi
 
