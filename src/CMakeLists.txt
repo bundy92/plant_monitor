@@ -1,8 +1,12 @@
 idf_component_register(
     SRCS
-        "main.cpp"
-        "plant_monitor.c"
+        "main_example.cpp"
+        "sensors/sensor_interface.c"
+        "sensors/aht10.c"
+        "display/display_interface.c"
     INCLUDE_DIRS
         "."
         ".."
+        "sensors"
+        "display"
 ) 

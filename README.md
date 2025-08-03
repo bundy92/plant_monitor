@@ -1,20 +1,24 @@
-# 🌱 Plant Monitor - Clean & Simple
+# 🌱 Plant Monitor - Modular & Extensible
 
-A clean, industry-standard plant monitoring system for ESP32-C6 with minimal complexity and maximum reliability.
+A clean, industry-standard plant monitoring system for ESP32-C6 with modular sensor and display interfaces for maximum flexibility and future expansion.
 
-## 🎯 **Clean Architecture**
+## 🎯 **Modular Architecture**
 
-### **Single Library Approach**
-- **`plant_monitor.h`** - Clean, unified interface
-- **`plant_monitor.c`** - Consolidated implementation
-- **`main_example.cpp`** - Simple application example
+### **Sensor Interface**
+- **`sensors/sensor_interface.h`** - Unified sensor interface
+- **`sensors/aht10.h`** - AHT10 temperature/humidity sensor
+- **Future sensors** - DHT11/22, BME280, SHT30, etc.
+
+### **Display Interface**
+- **`display/display_interface.h`** - Unified display interface
+- **Future displays** - OLED, LCD, TFT, e-ink, etc.
 
 ### **Key Benefits**
-- ✅ **Minimal Complexity** - Only 3 core files
+- ✅ **Modular Design** - Easy to add new sensors and displays
 - ✅ **Industry Standard** - Professional documentation
 - ✅ **Robust & Stable** - Clean error handling
-- ✅ **Easy to Maintain** - Simple structure
-- ✅ **Extensible** - Easy to add features
+- ✅ **Future-Proof** - Extensible architecture
+- ✅ **Clean Structure** - Organized by functionality
 
 ## 🚀 **Quick Start**
 
@@ -34,72 +38,122 @@ pio device monitor
 
 ### **3. Expected Output**
 ```
-I (1234) PLANT_MONITOR_MAIN: Plant Monitor System Starting...
-I (1234) PLANT_MONITOR: Initializing Plant Monitor System
-I (1234) PLANT_MONITOR: I2C initialized successfully
-I (1234) PLANT_MONITOR: ADC initialized successfully
-I (1234) PLANT_MONITOR: AHT10 sensor at 0x38 initialized successfully
-I (1234) PLANT_MONITOR: Plant Monitor System initialized successfully
-I (1234) PLANT_MONITOR: Features:
-I (1234) PLANT_MONITOR: - AHT10 temperature/humidity sensors
-I (1234) PLANT_MONITOR: - Analog soil moisture and light sensors
-I (1234) PLANT_MONITOR: - Plant health analysis with emoji indicators
-I (1234) PLANT_MONITOR: - WiFi connectivity and data transmission
-I (1234) PLANT_MONITOR: - Professional numpy-style documentation
-I (1234) PLANT_MONITOR: - Clean, industry-standard architecture
+I (1234) PLANT_MONITOR_MODULAR: Plant Monitor System Starting...
+I (1234) SENSOR_INTERFACE: Initializing Sensor Interface
+I (1234) AHT10: Initializing AHT10 sensor at 0x38
+I (1234) AHT10: AHT10 sensor initialized successfully
+I (1234) DISPLAY_INTERFACE: Initializing Display Interface
+I (1234) DISPLAY_INTERFACE: Console display initialized
+I (1234) PLANT_MONITOR_MODULAR: Found 2 I2C devices
+I (1234) PLANT_MONITOR_MODULAR: System initialized successfully!
+I (1234) PLANT_MONITOR_MODULAR: Features:
+I (1234) PLANT_MONITOR_MODULAR: - Modular sensor interface (AHT10, DHT, analog)
+I (1234) PLANT_MONITOR_MODULAR: - Modular display interface (OLED, LCD, TFT)
+I (1234) PLANT_MONITOR_MODULAR: - Professional numpy-style documentation
+I (1234) PLANT_MONITOR_MODULAR: - Robust error handling and recovery
+I (1234) PLANT_MONITOR_MODULAR: - Plant health analysis with emoji indicators
+I (1234) PLANT_MONITOR_MODULAR: - Extensible architecture for future sensors
+I (1234) PLANT_MONITOR_MODULAR: - Clean, industry-standard design
 ```
 
-## 📁 **Clean Project Structure**
+## 📁 **Modular Project Structure**
 
 ```
 plant_monitor/
 ├── src/
-│   ├── main.cpp              # Main application
-│   ├── main_example.cpp      # Example application
-│   ├── plant_monitor.h       # Clean interface
-│   ├── plant_monitor.c       # Consolidated implementation
-│   └── CMakeLists.txt        # Build configuration
+│   ├── main_example.cpp      # Modular example application
+│   ├── sensors/
+│   │   ├── sensor_interface.h # Unified sensor interface
+│   │   ├── sensor_interface.c # Sensor interface implementation
+│   │   ├── aht10.h          # AHT10 sensor driver
+│   │   └── aht10.c          # AHT10 implementation
+│   ├── display/
+│   │   ├── display_interface.h # Unified display interface
+│   │   └── display_interface.c # Display implementation
+│   └── CMakeLists.txt       # Build configuration
 ├── test/
-│   ├── unit/                 # Unit tests
-│   └── integration/          # Integration tests
-├── platformio.ini            # PlatformIO config
-├── config.h                  # System configuration
-├── deploy.sh                 # Deployment script
-├── run_tests.sh              # Test runner
-└── README.md                 # This file
+│   ├── unit/                # Unit tests
+│   └── integration/         # Integration tests
+├── platformio.ini           # PlatformIO config
+├── config.h                 # System configuration
+├── deploy.sh                # Deployment script
+├── run_tests.sh             # Test runner
+└── README.md                # This file
 ```
 
 ## 🔧 **Configuration**
 
-### **Default Settings**
+### **Sensor Configuration**
 ```cpp
-// I2C Configuration
-#define PLANT_MONITOR_DEFAULT_SDA_PIN        21
-#define PLANT_MONITOR_DEFAULT_SCL_PIN        22
-#define PLANT_MONITOR_DEFAULT_I2C_FREQ_HZ    100000
+// AHT10 Sensors
+sensor_config_t aht10_1 = {
+    .type = SENSOR_TYPE_AHT10,
+    .address = 0x38,
+    .enabled = true,
+    .name = "AHT10-1"
+};
 
-// AHT10 Sensor Addresses
-#define PLANT_MONITOR_AHT10_ADDR_1           0x38
-#define PLANT_MONITOR_AHT10_ADDR_2           0x39
+sensor_config_t aht10_2 = {
+    .type = SENSOR_TYPE_AHT10,
+    .address = 0x39,
+    .enabled = true,
+    .name = "AHT10-2"
+};
 
-// Plant Health Ranges
-temp_min: 10.0°C, temp_max: 35.0°C
-temp_optimal_min: 18.0°C, temp_optimal_max: 28.0°C
-humidity_min: 30.0%, humidity_max: 80.0%
-humidity_optimal_min: 40.0%, humidity_optimal_max: 70.0%
+// Analog Sensors
+sensor_config_t soil_moisture = {
+    .type = SENSOR_TYPE_SOIL_MOISTURE,
+    .pin = 1,
+    .enabled = true,
+    .name = "Soil Moisture"
+};
+
+sensor_config_t light_sensor = {
+    .type = SENSOR_TYPE_LIGHT,
+    .pin = 2,
+    .enabled = true,
+    .name = "Light Sensor"
+};
+```
+
+### **Display Configuration**
+```cpp
+// Console Display (for debugging)
+display_config_t console_display = {
+    .type = DISPLAY_TYPE_CONSOLE,
+    .enabled = true,
+    .name = "Console Display"
+};
+
+// Future: OLED Display
+display_config_t oled_display = {
+    .type = DISPLAY_TYPE_OLED_SSD1306,
+    .i2c_address = 0x3C,
+    .sda_pin = 21,
+    .scl_pin = 22,
+    .enabled = true,
+    .name = "OLED Display"
+};
 ```
 
 ## 📊 **Features**
 
-### **Core Functionality**
-- **AHT10 Sensors** - Temperature and humidity monitoring
+### **Modular Sensor Support**
+- **AHT10** - Temperature and humidity monitoring
+- **DHT11/22** - One-wire temperature/humidity (planned)
+- **BME280** - Pressure, temperature, humidity (planned)
+- **SHT30** - High-precision temperature/humidity (planned)
 - **Analog Sensors** - Soil moisture and light level
-- **Plant Health Analysis** - Emoji-based health indicators
-- **Display Output** - ASCII art display in console
-- **WiFi Connectivity** - Data transmission capability
-- **Professional Documentation** - Numpy-style docstrings
+- **Custom Sensors** - Easy to add new sensor types
 
-### **Health Indicators**
+### **Modular Display Support**
+- **Console** - ASCII art display in console
+- **OLED SSD1306** - 128x64 I2C OLED display (planned)
+- **LCD 16x2** - Standard LCD display (planned)
+- **TFT SPI** - Color TFT displays (planned)
+- **E-Ink** - Low-power e-ink displays (planned)
+
+### **Plant Health Analysis**
 - 😊 **Excellent** (90-100%) - Perfect conditions
 - 🙂 **Good** (70-89%) - Good conditions
 - 😐 **Fair** (50-69%) - Acceptable conditions
@@ -108,19 +162,19 @@ humidity_optimal_min: 40.0%, humidity_optimal_max: 70.0%
 
 ## 🛠️ **Hardware Setup**
 
-### **AHT10 Sensors**
+### **AHT10 Sensors (with proper resistors)**
 ```
 Sensor 1 (0x38):
 - VCC → 3.3V
 - GND → GND
-- SDA → GPIO 21
-- SCL → GPIO 22
+- SDA → GPIO 21 (with 4.7kΩ pull-up)
+- SCL → GPIO 22 (with 4.7kΩ pull-up)
 
 Sensor 2 (0x39):
 - VCC → 3.3V
 - GND → GND
-- SDA → GPIO 21
-- SCL → GPIO 22
+- SDA → GPIO 21 (with 4.7kΩ pull-up)
+- SCL → GPIO 22 (with 4.7kΩ pull-up)
 ```
 
 ### **Analog Sensors**
@@ -139,15 +193,22 @@ Light Sensor: GPIO 2 (ADC1_CH1)
 │                         │
 │  T: 23.5°C  H: 45.7%   │
 │  Soil: 512  Light: 2048 │
-│  WiFi: ✗  Data: ✗       │
+│  Sensors: 4/4 working   │
+│  Displays: 1/1 working  │
 │  Uptime: 01:00:00       │
 └─────────────────────────┘
 ```
 
 ### **Data Logging**
 ```
-I (1234) PLANT_MONITOR: Sensor readings: T1=23.45°C, H1=45.67%, T2=23.52°C, H2=45.89%, Avg T=23.49°C, Avg H=45.78%, Soil=512, Light=2048
-I (1234) PLANT_MONITOR: Plant health: Excellent 😊 (Score: 95.0) - Perfect conditions! Keep it up.
+I (1234) PLANT_MONITOR_MODULAR: Read 4 sensor readings
+I (1234) PLANT_MONITOR_MODULAR: Valid sensors: 4/4
+I (1234) PLANT_MONITOR_MODULAR: Temperature: 23.45°C
+I (1234) PLANT_MONITOR_MODULAR: Humidity: 45.67%
+I (1234) PLANT_MONITOR_MODULAR: Soil Moisture: 512
+I (1234) PLANT_MONITOR_MODULAR: Light Level: 2048
+I (1234) PLANT_MONITOR_MODULAR: Plant Health: Excellent 😊 (Score: 95.0)
+I (1234) PLANT_MONITOR_MODULAR: Recommendation: Perfect conditions! Keep it up.
 ```
 
 ## 🧪 **Testing**
@@ -191,27 +252,42 @@ I (1234) PLANT_MONITOR: Plant health: Excellent 😊 (Score: 95.0) - Perfect con
    ./deploy.sh /dev/ttyACM0
    ```
 
-## 🎯 **Why This Approach?**
+## 🎯 **Why This Modular Approach?**
 
-### **Before (Complex)**
-- 15+ files with complex interdependencies
-- Multiple interfaces and abstractions
-- Difficult to maintain and debug
-- High risk of breaking changes
+### **Before (Consolidated)**
+- Single large library with all functionality
+- Difficult to add new sensor types
+- Hard to customize display behavior
+- Limited extensibility
 
-### **After (Clean)**
-- 3 core files with clear responsibilities
-- Single, unified interface
-- Easy to understand and maintain
-- Stable and reliable
+### **After (Modular)**
+- Separate interfaces for sensors and displays
+- Easy to add new sensor types
+- Simple to implement new displays
+- Highly extensible and maintainable
+
+## 🚀 **Future Expansion**
+
+### **Adding New Sensors**
+1. Create new sensor header (e.g., `dht11.h`)
+2. Implement sensor functions
+3. Add to `sensor_interface.c`
+4. Configure in main application
+
+### **Adding New Displays**
+1. Create new display header (e.g., `oled_ssd1306.h`)
+2. Implement display functions
+3. Add to `display_interface.c`
+4. Configure in main application
 
 ## 🚀 **Next Steps**
 
 1. **Deploy the system**: `./deploy.sh`
 2. **Monitor output**: `pio device monitor`
-3. **Customize configuration** in `config.h`
-4. **Add features** as needed
+3. **Add resistors** for proper I2C communication
+4. **Add new sensors** as needed
+5. **Add new displays** as needed
 
 ---
 
-**Happy Clean Plant Monitoring! 🌱📊😊** 
+**Happy Modular Plant Monitoring! 🌱📊😊** 
