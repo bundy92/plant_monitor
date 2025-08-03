@@ -1,258 +1,345 @@
+/**
+ * @file aht10.c
+ * @brief AHT10 Temperature and Humidity Sensor Implementation
+ * 
+ * This module implements the AHT10 sensor driver with proper I2C
+ * communication, calibration, and error handling. It provides
+ * temperature and humidity readings with high accuracy.
+ * 
+ * @author Plant Monitor System
+ * @version 1.0.0
+ * @date 2024
+ */
+
 #include "aht10.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include <string.h>
+#include <esp_log.h>
+#include <driver/i2c.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 static const char *TAG = "AHT10";
 
-// Default I2C pins
-#define AHT10_DEFAULT_SDA_PIN    GPIO_NUM_21
-#define AHT10_DEFAULT_SCL_PIN    GPIO_NUM_22
+// Global variables
+static aht10_config_t g_config;
+static bool g_initialized = false;
 
-esp_err_t aht10_get_default_config(aht10_config_t* config, uint8_t sensor_addr) {
-    if (config == NULL) {
-        return ESP_ERR_INVALID_ARG;
+/**
+ * @brief Write command to AHT10 sensor
+ * 
+ * @param cmd Command to write
+ * @param data Additional data (if any)
+ * @param data_len Length of additional data
+ * @return ESP_OK on success, error code on failure
+ */
+static esp_err_t aht10_write_cmd(uint8_t cmd, const uint8_t *data, size_t data_len)
+{
+    if (!g_initialized) {
+        return ESP_ERR_INVALID_STATE;
     }
     
-    config->i2c_port = I2C_NUM_0;
-    config->sensor_addr = sensor_addr;
-    config->i2c_freq_hz = AHT10_DEFAULT_FREQ_HZ;
-    config->timeout_ms = AHT10_DEFAULT_TIMEOUT_MS;
-    config->initialized = false;
+    i2c_cmd_handle_t cmd_handle = i2c_cmd_link_create();
+    i2c_master_start(cmd_handle);
+    i2c_master_write_byte(cmd_handle, (g_config.address << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd_handle, cmd, true);
     
-    return ESP_OK;
+    if (data && data_len > 0) {
+        i2c_master_write(cmd_handle, (uint8_t*)data, data_len, true);
+    }
+    
+    i2c_master_stop(cmd_handle);
+    
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd_handle, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd_handle);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "AHT10 write command failed: %s", esp_err_to_name(ret));
+    }
+    
+    return ret;
 }
 
-esp_err_t aht10_init(aht10_config_t* config) {
-    if (config == NULL) {
-        ESP_LOGE(TAG, "Invalid config pointer");
+/**
+ * @brief Read data from AHT10 sensor
+ * 
+ * @param data Buffer to store read data
+ * @param data_len Length of data to read
+ * @return ESP_OK on success, error code on failure
+ */
+static esp_err_t aht10_read_data(uint8_t *data, size_t data_len)
+{
+    if (!g_initialized || !data || data_len == 0) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGI(TAG, "Initializing AHT10 sensor at address 0x%02X", config->sensor_addr);
+    i2c_cmd_handle_t cmd_handle = i2c_cmd_link_create();
+    i2c_master_start(cmd_handle);
+    i2c_master_write_byte(cmd_handle, (g_config.address << 1) | I2C_MASTER_READ, true);
+    i2c_master_read(cmd_handle, data, data_len, I2C_MASTER_LAST_NACK);
+    i2c_master_stop(cmd_handle);
     
-    // Configure I2C
-    i2c_config_t i2c_conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = AHT10_DEFAULT_SDA_PIN,
-        .scl_io_num = AHT10_DEFAULT_SCL_PIN,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master = {
-            .clk_speed = config->i2c_freq_hz,
-        },
-    };
+    esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd_handle, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd_handle);
     
-    esp_err_t ret = i2c_param_config(config->i2c_port, &i2c_conf);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "I2C parameter config failed: %s", esp_err_to_name(ret));
-        return ret;
+        ESP_LOGE(TAG, "AHT10 read data failed: %s", esp_err_to_name(ret));
     }
     
-    // Try to install I2C driver, ignore if already installed
-    ret = i2c_driver_install(config->i2c_port, i2c_conf.mode, 0, 0, 0);
-    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "I2C driver install failed: %s", esp_err_to_name(ret));
-        return ret;
+    return ret;
+}
+
+esp_err_t aht10_init(const aht10_config_t *config)
+{
+    if (!config) {
+        return ESP_ERR_INVALID_ARG;
     }
     
-    // If driver was already installed, that's fine
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "I2C driver already installed");
+    ESP_LOGI(TAG, "Initializing AHT10 sensor at 0x%02x", config->address);
+    
+    // Copy configuration
+    memcpy(&g_config, config, sizeof(aht10_config_t));
+    
+    // Check if sensor is enabled
+    if (!g_config.enabled) {
+        ESP_LOGW(TAG, "AHT10 sensor is disabled");
+        return ESP_OK;
     }
+    
+    // Wait for sensor to power up
+    vTaskDelay(pdMS_TO_TICKS(40));
     
     // Send soft reset command
-    ret = aht10_reset_sensor(config);
+    esp_err_t ret = aht10_write_cmd(AHT10_CMD_SOFT_RESET, NULL, 0);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "AHT10 reset failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "AHT10 soft reset failed");
         return ret;
     }
     
-    vTaskDelay(pdMS_TO_TICKS(20)); // Wait for reset
+    // Wait after reset
+    vTaskDelay(pdMS_TO_TICKS(20));
     
-    // Send initialization command
-    uint8_t init_cmd[] = {AHT10_CMD_INITIALIZE, 0x08, 0x00};
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (config->sensor_addr << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write(cmd, init_cmd, 3, true);
-    i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(config->i2c_port, cmd, config->timeout_ms / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    
+    // Check if sensor is calibrated
+    bool calibrated;
+    ret = aht10_is_calibrated(&calibrated);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "AHT10 initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to check AHT10 calibration status");
         return ret;
     }
     
-    vTaskDelay(pdMS_TO_TICKS(10)); // Wait for initialization
+    if (!calibrated) {
+        ESP_LOGI(TAG, "AHT10 sensor not calibrated, starting calibration");
+        ret = aht10_calibrate();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "AHT10 calibration failed");
+            return ret;
+        }
+    } else {
+        ESP_LOGI(TAG, "AHT10 sensor is already calibrated");
+    }
     
-    config->initialized = true;
+    g_initialized = true;
     ESP_LOGI(TAG, "AHT10 sensor initialized successfully");
-    
     return ESP_OK;
 }
 
-esp_err_t aht10_deinit(aht10_config_t* config) {
-    if (config == NULL) {
+esp_err_t aht10_read(aht10_reading_t *reading)
+{
+    if (!reading || !g_initialized) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    esp_err_t ret = i2c_driver_delete(config->i2c_port);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "I2C driver delete failed: %s", esp_err_to_name(ret));
-    }
-    
-    config->initialized = false;
-    return ret;
-}
-
-esp_err_t aht10_reset_sensor(aht10_config_t* config) {
-    if (config == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    uint8_t reset_cmd[] = {AHT10_CMD_SOFT_RESET};
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (config->sensor_addr << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write(cmd, reset_cmd, 1, true);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(config->i2c_port, cmd, config->timeout_ms / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    
-    return ret;
-}
-
-esp_err_t aht10_read_sensor(aht10_config_t* config, aht10_data_t* data) {
-    if (config == NULL || data == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    if (!config->initialized) {
-        ESP_LOGE(TAG, "Sensor not initialized");
-        return ESP_ERR_INVALID_STATE;
-    }
+    memset(reading, 0, sizeof(aht10_reading_t));
     
     // Send measurement command
-    uint8_t measure_cmd[] = {AHT10_CMD_MEASURE, 0x33, 0x00};
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (config->sensor_addr << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write(cmd, measure_cmd, 3, true);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(config->i2c_port, cmd, config->timeout_ms / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    
+    uint8_t cmd_data[] = {0x33, 0x00};
+    esp_err_t ret = aht10_write_cmd(AHT10_CMD_MEASURE, cmd_data, sizeof(cmd_data));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Measurement command failed: %s", esp_err_to_name(ret));
+        reading->error = ret;
+        reading->valid = false;
         return ret;
     }
     
-    vTaskDelay(pdMS_TO_TICKS(80)); // Wait for measurement
+    // Wait for measurement to complete
+    vTaskDelay(pdMS_TO_TICKS(80));
     
-    // Read 6 bytes of data
-    uint8_t sensor_data[6];
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (config->sensor_addr << 1) | I2C_MASTER_READ, true);
-    i2c_master_read(cmd, sensor_data, 6, I2C_MASTER_LAST_NACK);
-    i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(config->i2c_port, cmd, config->timeout_ms / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    
+    // Read measurement data (6 bytes)
+    uint8_t data[6];
+    ret = aht10_read_data(data, sizeof(data));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Read data failed: %s", esp_err_to_name(ret));
+        reading->error = ret;
+        reading->valid = false;
         return ret;
     }
     
-    // Check if measurement is ready
-    if (sensor_data[0] & 0x80) {
-        ESP_LOGE(TAG, "Measurement not ready");
+    // Check if sensor is busy
+    if (data[0] & AHT10_STATUS_BUSY) {
+        ESP_LOGW(TAG, "AHT10 sensor is busy");
+        reading->error = ESP_ERR_TIMEOUT;
+        reading->valid = false;
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    // Check if sensor is calibrated
+    if (!(data[0] & AHT10_STATUS_CAL)) {
+        ESP_LOGW(TAG, "AHT10 sensor is not calibrated");
+        reading->error = ESP_ERR_INVALID_STATE;
+        reading->valid = false;
         return ESP_ERR_INVALID_STATE;
     }
     
-    // Calculate humidity (20-bit value)
-    uint32_t humidity_raw = ((uint32_t)(sensor_data[1] & 0x0F) << 16) | 
-                           ((uint32_t)sensor_data[2] << 8) | 
-                           sensor_data[3];
-    data->humidity = (float)humidity_raw * 100.0 / 1048576.0;
+    // Convert humidity data (20 bits)
+    uint32_t humidity_raw = ((uint32_t)data[1] << 12) | ((uint32_t)data[2] << 4) | (data[3] >> 4);
+    reading->humidity = (float)humidity_raw * 100.0f / 1048576.0f; // 2^20
     
-    // Calculate temperature (20-bit value)
-    uint32_t temp_raw = ((uint32_t)(sensor_data[3] & 0x0F) << 16) | 
-                        ((uint32_t)sensor_data[4] << 8) | 
-                        sensor_data[5];
-    data->temperature = (float)temp_raw * 200.0 / 1048576.0 - 50.0;
+    // Convert temperature data (20 bits)
+    uint32_t temp_raw = ((uint32_t)(data[3] & 0x0F) << 16) | ((uint32_t)data[4] << 8) | data[5];
+    reading->temperature = (float)temp_raw * 200.0f / 1048576.0f - 50.0f; // 2^20, -50°C offset
     
-    data->timestamp = esp_timer_get_time() / 1000; // Convert to milliseconds
-    data->valid = true;
+    // Validate readings
+    if (reading->humidity >= 0.0f && reading->humidity <= 100.0f &&
+        reading->temperature >= -50.0f && reading->temperature <= 150.0f) {
+        reading->valid = true;
+        reading->error = ESP_OK;
+    } else {
+        ESP_LOGW(TAG, "AHT10 readings out of range: T=%.2f°C, H=%.2f%%", 
+                 reading->temperature, reading->humidity);
+        reading->valid = false;
+        reading->error = ESP_ERR_INVALID_RESPONSE;
+    }
     
-    ESP_LOGD(TAG, "Temperature: %.2f°C, Humidity: %.2f%%", data->temperature, data->humidity);
-    
-    return ESP_OK;
+    return reading->error;
 }
 
-bool aht10_is_initialized(const aht10_config_t* config) {
-    return (config != NULL) && config->initialized;
-}
-
-esp_err_t aht10_validate_data(const aht10_data_t* data) {
-    if (data == NULL) {
+esp_err_t aht10_read_temperature(float *temperature)
+{
+    if (!temperature) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    if (!data->valid) {
+    aht10_reading_t reading;
+    esp_err_t ret = aht10_read(&reading);
+    if (ret == ESP_OK && reading.valid) {
+        *temperature = reading.temperature;
+    }
+    
+    return ret;
+}
+
+esp_err_t aht10_read_humidity(float *humidity)
+{
+    if (!humidity) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    aht10_reading_t reading;
+    esp_err_t ret = aht10_read(&reading);
+    if (ret == ESP_OK && reading.valid) {
+        *humidity = reading.humidity;
+    }
+    
+    return ret;
+}
+
+esp_err_t aht10_soft_reset(void)
+{
+    if (!g_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    // Check temperature range (-40 to 85°C)
-    if (data->temperature < -40.0f || data->temperature > 85.0f) {
-        ESP_LOGW(TAG, "Temperature out of range: %.2f°C", data->temperature);
+    ESP_LOGI(TAG, "Sending soft reset to AHT10");
+    
+    esp_err_t ret = aht10_write_cmd(AHT10_CMD_SOFT_RESET, NULL, 0);
+    if (ret == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+        ESP_LOGI(TAG, "AHT10 soft reset completed");
+    }
+    
+    return ret;
+}
+
+esp_err_t aht10_is_calibrated(bool *calibrated)
+{
+    if (!calibrated || !g_initialized) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    uint8_t data[1];
+    esp_err_t ret = aht10_read_data(data, sizeof(data));
+    if (ret != ESP_OK) {
+        *calibrated = false;
+        return ret;
+    }
+    
+    *calibrated = (data[0] & AHT10_STATUS_CAL) != 0;
+    return ESP_OK;
+}
+
+esp_err_t aht10_calibrate(void)
+{
+    if (!g_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    // Check humidity range (0 to 100%)
-    if (data->humidity < 0.0f || data->humidity > 100.0f) {
-        ESP_LOGW(TAG, "Humidity out of range: %.2f%%", data->humidity);
+    ESP_LOGI(TAG, "Calibrating AHT10 sensor");
+    
+    // Send calibration command
+    uint8_t cmd_data[] = {0x08, 0x00};
+    esp_err_t ret = aht10_write_cmd(AHT10_CMD_INIT, cmd_data, sizeof(cmd_data));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "AHT10 calibration command failed");
+        return ret;
+    }
+    
+    // Wait for calibration to complete
+    vTaskDelay(pdMS_TO_TICKS(10));
+    
+    // Check if calibration was successful
+    bool calibrated;
+    ret = aht10_is_calibrated(&calibrated);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to check calibration status");
+        return ret;
+    }
+    
+    if (calibrated) {
+        ESP_LOGI(TAG, "AHT10 calibration successful");
+        return ESP_OK;
+    } else {
+        ESP_LOGE(TAG, "AHT10 calibration failed");
         return ESP_ERR_INVALID_STATE;
     }
+}
+
+esp_err_t aht10_get_status(bool *busy, bool *calibrated)
+{
+    if (!busy || !calibrated || !g_initialized) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    uint8_t data[1];
+    esp_err_t ret = aht10_read_data(data, sizeof(data));
+    if (ret != ESP_OK) {
+        *busy = false;
+        *calibrated = false;
+        return ret;
+    }
+    
+    *busy = (data[0] & AHT10_STATUS_BUSY) != 0;
+    *calibrated = (data[0] & AHT10_STATUS_CAL) != 0;
     
     return ESP_OK;
 }
 
-esp_err_t aht10_scan_devices(i2c_port_t i2c_port) {
-    ESP_LOGI(TAG, "Scanning I2C bus for AHT10 devices...");
-    
-    int found_devices = 0;
-    
-    for (int i = 0; i < 128; i++) {
-        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, (i << 1) | I2C_MASTER_WRITE, true);
-        i2c_master_stop(cmd);
-        
-        esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 1000 / portTICK_PERIOD_MS);
-        i2c_cmd_link_delete(cmd);
-        
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Found I2C device at address: 0x%02X", i);
-            found_devices++;
-            
-            // Check if it's an AHT10 sensor
-            if (i == AHT10_ADDR_1 || i == AHT10_ADDR_2) {
-                ESP_LOGI(TAG, "  -> This looks like an AHT10 sensor!");
-            }
-        }
+esp_err_t aht10_deinit(void)
+{
+    if (!g_initialized) {
+        return ESP_OK;
     }
     
-    ESP_LOGI(TAG, "I2C scan complete! Found %d devices", found_devices);
+    ESP_LOGI(TAG, "Deinitializing AHT10 sensor");
     
-    if (found_devices == 0) {
-        ESP_LOGW(TAG, "No I2C devices found. Check wiring and power connections.");
-        return ESP_ERR_NOT_FOUND;
-    }
+    g_initialized = false;
+    ESP_LOGI(TAG, "AHT10 sensor deinitialized");
     
     return ESP_OK;
 } 
